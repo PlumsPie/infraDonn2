@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// npm run dev to restart server dans C:\Users\sarah\OneDrive\Documents\05_HEIG\S3\InfraDon2\CodeBase\infraDonn2\infraDonn2
+// connexion couch DB: http://127.0.0.1:5984/_utils/#login
 import { onMounted, ref } from 'vue'
 import PouchDB from 'pouchdb'
 
@@ -32,7 +34,7 @@ const fetchData = (): any => {
   storage.value
     .allDocs({ include_docs: true })
     .then((result: any) => {
-      console.log('=> Données récupérées :', result.rows)
+
       postsData.value = result.rows.map((row: any) => row.doc)
     })
     .catch((error: any) => {
@@ -40,7 +42,21 @@ const fetchData = (): any => {
     })
 }
 const doc = {
-  post_name: 'SuperPost',
+  post_name: 'Super Document',
+  post_content: 'SuperContenu',
+  comments: [
+    {
+      title: 'Hello',
+      author: 'Alice',
+    },
+    {
+      title: 'Hi',
+      author: 'Bob',
+    },
+  ],
+}
+const doc2 = {
+  post_name: 'Super Document Modifié',
   post_content: 'SuperContenu',
   comments: [
     {
@@ -61,29 +77,55 @@ const addDoc = (doc) => {
       console.log(err)
     })
 }
+const updateDoc = (docId, docRev) => {
+  storage.value
+    .put({
+      _id:docId,
+      _rev:docRev,
+      post_name: 'Super Document Modifié'
+    })
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+const deleteDoc = (docId, docRev) => {
+
+  storage.value
+    .remove(docId, docRev)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
 
 onMounted(() => {
   console.log('=> Composant initialisé')
   initDatabase()
   fetchData()
-  addDoc(doc)
+
 })
+
 </script>
 
 <template>
   <h1>Fetch Data</h1>
-  <button @click="addDoc(doc)">Nouveau Document</button>
+  <button @click="addDoc(doc)">Nouveau Super Document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
+    <hr/>
     <h2>{{ post.post_name }}</h2>
     <p>{{ post.post_content }}</p>
+    <p>{{ post._id   }}</p>
+    <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
+    <button @click="updateDoc(post._id,post._rev)">Editer Super Document</button>
   </article>
+
 </template>
 
 <!-- /* <script setup lang="ts">
 import { ref } from 'vue'
 import { onMounted } from 'vue'
 import PouchDB from 'pouchdb'
-// npm run dev to restart server
 // DATA - MODEL
 const counter = ref(20)
 const storage = ref()
