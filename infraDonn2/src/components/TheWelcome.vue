@@ -55,20 +55,7 @@ const doc = {
     },
   ],
 }
-const doc2 = {
-  post_name: 'Super Document Modifié',
-  post_content: 'SuperContenu',
-  comments: [
-    {
-      title: 'Hello',
-      author: 'Alice',
-    },
-    {
-      title: 'Hi',
-      author: 'Bob',
-    },
-  ],
-}
+
 const addDoc = (doc) => {
   storage.value
     .post(doc)
@@ -115,7 +102,12 @@ onMounted(() => {
     <hr/>
     <h2>{{ post.post_name }}</h2>
     <p>{{ post.post_content }}</p>
-    <p>{{ post._id   }}</p>
+    <p>{{ post._rev   }}</p>
+    <!-- <form method="">
+      <label for="{{ post._id   }}">Titre</label>
+      <input type="text" id="{{ post._id   }}" name="title" value="<?= htmlspecialchars($title ?? '') ?>" required minlength="2">
+      <input>
+    </form> -->
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
     <button @click="updateDoc(post._id,post._rev)">Editer Super Document</button>
   </article>
