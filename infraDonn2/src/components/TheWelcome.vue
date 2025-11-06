@@ -18,15 +18,30 @@ const storage = ref()
 const postsData = ref<Post[]>([])
 
 // Initialisation de la base de données
+// const initDatabase = () => {
+//   console.log('=> Connexion à la base de données')
+//   const db = new PouchDB('http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db')
+//   if (db) {
+//     console.log('Connecté à la collection : ' + db?.name)
+//     storage.value = db
+//   } else {
+//     console.warn('Echec lors de la connexion à la base de données')
+//   }
+// }
 const initDatabase = () => {
-  console.log('=> Connexion à la base de données')
-  const db = new PouchDB('http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db')
+  console.log('=> Connexion à la base de données');
+  const db = new PouchDB('Posts');
   if (db) {
-    console.log('Connecté à la collection : ' + db?.name)
-    storage.value = db
+    console.log('Connecté à la collection : ' + db?.name);
+    storage.value = db;
+    db.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db").then();
+       fetchData();
   } else {
     console.warn('Echec lors de la connexion à la base de données')
   }
+}
+const replicateDB = ()=>{
+  storage.value.replicate.to("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db")
 }
 
 // Récupération des données
@@ -93,6 +108,7 @@ onMounted(() => {
 
 })
 
+
 </script>
 
 <template>
@@ -111,6 +127,7 @@ onMounted(() => {
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
     <button @click="updateDoc(post._id,post._rev)">Editer Super Document</button>
   </article>
+  <button @click="replicateDB()">Valider les changements</button>
 
 </template>
 
