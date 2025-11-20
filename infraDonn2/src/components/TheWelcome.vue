@@ -16,6 +16,8 @@ declare interface Post {
 const storage = ref()
 // Données stockées
 const postsData = ref<Post[]>([])
+//mode offline désactivé par défaut
+const offline= false;
 
 // Initialisation de la base de données
 // const initDatabase = () => {
@@ -113,6 +115,9 @@ onMounted(() => {
 
 <template>
   <h1>Fetch Data</h1>
+  <label for="checkbox">Mode hors ligne    </label>
+  <input id="checkbox" type="checkbox"></input>
+<br>
   <button @click="addDoc(doc)">Nouveau Super Document</button>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <hr/>
