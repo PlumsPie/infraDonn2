@@ -11,6 +11,18 @@ declare interface Post {
   _rev: string;
   post_name: string
   post_content: string
+  post_likes:BigInteger
+  attributes: {
+    creation_date: any
+  }
+}
+declare interface Comment {
+   _id: string;
+  _rev: string;
+  post_id: string
+  comment_content: string
+  comment_likes:BigInteger
+  comment_author:string
   attributes: {
     creation_date: any
   }
@@ -112,8 +124,7 @@ const fetchData = (): any => {
   storage.value
     .allDocs({ include_docs: true })
     .then((result: any) => {
-
-      postsData.value = result.rows.map((row: any) => row.doc)
+      postsData.value = result.rows.map((row: any) => row.doc).filter(p => !(p._id.startsWith("_design")));
     })
     .catch((error: any) => {
       console.error('=> Erreur lors de la récupération des données :', error)
@@ -122,6 +133,7 @@ const fetchData = (): any => {
 const doc = {
   post_name: 'Super Document',
   post_content: 'SuperContenu',
+  post_likes:0,
   comments: [
     {
       title: 'Hello',
@@ -133,8 +145,13 @@ const doc = {
     },
   ],
 }
+const com ={
+  comment_author:`Quelqu'un de très chouette sans doute`,
+  comment_content: 'Super commentaire',
+  comment_likes:0
+}
 
-const addDoc = (doc) => {
+const addDoc = (doc: any) => {
   storage.value
     .post(doc)
     .then(() => fetchData())
@@ -142,19 +159,54 @@ const addDoc = (doc) => {
       console.log(err)
     })
 }
-const updateDoc = (docId, docRev) => {
+const addCom = (doc: any, com:any) => {
+  com.post_id=doc._id
   storage.value
-    .put({
-      _id:docId,
-      _rev:docRev,
-      post_name: 'Super Document Modifié'
-    })
+    .post(com)
     .then(() => fetchData())
     .catch(function (err: any) {
       console.log(err)
     })
 }
-const deleteDoc = (docId, docRev) => {
+const updateDoc = (doc: any) => {
+  doc.post_name= "Super Document Modifié";
+  storage.value
+    .put(doc)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+const updateCom = (doc: any, com:any) => {
+  com.post_id=doc._id;
+  com.comment_content='Commentaire modifié';
+  storage.value
+    .post(com)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+
+const likePost = (doc:any) => {
+  doc.post_likes++;
+  storage.value
+    .put(doc)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+const likeCom = (com:any) => {
+  com.comment_likes++;
+  storage.value
+    .put(com)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+const deleteDoc = (docId: any, docRev: any) => {
 
   storage.value
     .remove(docId, docRev)
@@ -163,12 +215,22 @@ const deleteDoc = (docId, docRev) => {
       console.log(err)
     })
 }
-const generate200Docs = (count = 200) => {
-  const words = ["léa", "inoé", "camilo", "yannis", "sarah", "tanguy", "dylan"];
+const deleteCom = (comId: any, comRev: any) => {
+
+  storage.value
+    .remove(comId, comRev)
+    .then(() => fetchData())
+    .catch(function (err: any) {
+      console.log(err)
+    })
+}
+const creat100Docs = (count = 100) => {
+  const words = ["J'aime les bananes", "Le printemps est clairement la pire saison", "Si tu lis ce message, envoie-le à 15 de tes contacts ou tu mourras",
+   "Vous utilisez quoi comme crème après-rasage?", "Roses are red, violets are blue, if you know how to end this poem, then go ahead", "I'm quitting.", "Go away!"];
 
   for (let i = 0; i < count; i++) {
     storage.value.post({
-      title: "Doc " + i,
+      post_name: "Auto-Document " + i,
       post_content: words[Math.floor(Math.random() * words.length)]
     });
   }
@@ -176,7 +238,9 @@ const generate200Docs = (count = 200) => {
   fetchData();
 };
 
+const getComment = (postID: any)=>{
 
+}
 
 const search = (event: Event) => {
   const value = event.target.value.trim();
@@ -186,7 +250,7 @@ const search = (event: Event) => {
   }
 
   storage.value.find({
-    selector: { post_content: event.target.value }
+    selector: { post_name: event.target.value }
   })
 
     .then((result: any) => {
@@ -209,16 +273,23 @@ const search = (event: Event) => {
   <input type="checkbox" id="mode" name="mode" v-model="offline" @change="handleChange">
 <br>
   <button @click="addDoc(doc)">Nouveau Super Document</button>
-  <button @click="generate200Docs()">Générer 200 documents</button>
+  <button @click="creat100Docs()">Générer 100 documents</button>
   <input type="text" placeholder="Search" @keyup.enter="search" class="search">
   <br>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <hr/>
     <h2>{{ post.post_name }}</h2>
     <p>{{ post.post_content }}</p>
+    <p>{{ post.post_likes }}</p>
+    <div v-for="comment in getComment(post._id)" v-bind:key="(comment as any).id">
+      <h2>{{ post.post_name }}</h2>
+      <p>{{ post.post_content }}</p>
+      <p>{{ post.post_likes }}</p>
+    </div>
 
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
-    <button @click="updateDoc(post._id,post._rev)">Editer Super Document</button>
+    <button @click="updateDoc(post)">Editer Super Document</button>
+    <button @click="likePost(post)">J'aime!</button>
   </article>
   <button @click="replicateDB()">Valider les changements</button>
 
