@@ -21,7 +21,6 @@ declare interface Comment {
   _rev: string;
   post_id: string
   comment_content: string
-  comment_likes:BigInteger
   comment_author:string
   attributes: {
     creation_date: any
@@ -29,16 +28,22 @@ declare interface Comment {
 }
 
 // Référence à la base de données
-const storage = ref()
+const storage = ref();
+const storageComments = ref();
 let offline = ref(false);
 const sync = ref();
+const syncComments = ref();
+const needle = ref();
+const needleComment = ref();
+
 // Données stockées
 const postsData = ref<Post[]>([])
+const commentsData = ref<Comment[]>([])
 
 onMounted(() => {
   console.log('=> Composant initialisé')
   initDatabase()
-  fetchData()
+  //fetchData()
 
 })
 
@@ -49,37 +54,59 @@ onMounted(() => {
 const initDatabase = () => {
   console.log('=> Connexion à la base de données');
    const db = new PouchDB('Posts');
-  if (db) {
-    console.log('Connecté à la collection : ' + db?.name);
-    storage.value = db;
+   const dbComments = new PouchDB('Comments');
+  storage.value = db;
+  storageComments.value = dbComments;
+
+  if (!db || !dbComments) {
+    console.warn("Échec lors de la connexion aux bases");
+    return;
+  }
+
+
+    console.log('Connecté à la collection : ' + db?.name + 'et la collection : ' + dbComments?.name);
+
     storage.value.createIndex({
       index: {
         fields: ['post_content']
       }
     }).then(console.log("the index has been created!"));
 
-    storage.value.replicate.from("http://admin:Plkjhuio0825.@localhost:5984/db_infradon2")
+
+    storage.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db")
     fetchData()
     if (!offline.value) {
       startSync();
     }
 
-  } else {
-    console.warn('Echec lors de la connexion à la base de données')
-  }
+    storage.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments")
+    fetchData()
+    if (!offline.value) {
+      startSync();
+    }
+
+
 }
 
 const startSync = () => {
   if (sync.value) {
-    console.log("sync already running");
+    console.log("Posts syncing is already running");
     return;
   }
   if (!storage.value) {
     console.warn('No local DB to sync');
     return;
   }
+  if (syncComments.value) {
+    console.log("Comments syncing is already running");
+    return;
+  }
+  if (!storageComments.value) {
+    console.warn('No local DB to sync');
+    return;
+  }
 
-  sync.value = storage.value.sync("http://admin:Plkjhuio0825.@localhost:5984/db_infradon2",
+  sync.value = storage.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db",
     {
       live: true,
       retry: true
@@ -89,6 +116,16 @@ const startSync = () => {
       fetchData();
     })
 
+
+    syncComments.value = storageComments.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments",
+    {
+      live: true,
+      retry: true
+    })
+    .on('change', (info: any) => {
+      console.log("sync change", info);
+      fetchData();
+    })
   console.log('Sync started');
 }
 
@@ -97,6 +134,9 @@ const stopSync = () => {
   try {
     sync.value.cancel()
     sync.value = null
+    syncComments.value.cancel()
+    syncComments.value = null
+
     console.log('Sync cancelled')
   } catch (err) {
     console.error('Error cancelling sync', err)
@@ -127,8 +167,19 @@ const fetchData = (): any => {
       postsData.value = result.rows.map((row: any) => row.doc).filter(p => !(p._id.startsWith("_design")));
     })
     .catch((error: any) => {
-      console.error('=> Erreur lors de la récupération des données :', error)
-    })
+      console.error('=> Erreur lors de la récupération des posts :', error)
+    });
+    storageComments.value.allDocs({
+    include_docs: true
+
+  }).then((result: any) => {
+    console.log('=>Données récuperées', result.rows);
+    commentsData.value = result.rows.map((row: any) => row.doc);
+
+  }).catch(function (err: any) {
+    console.error('=> Erreur lors de la récupération des commentaires :', err)
+  });
+
 }
 const doc = {
   post_name: 'Super Document',
@@ -159,9 +210,13 @@ const addDoc = (doc: any) => {
       console.log(err)
     })
 }
-const addCom = (doc: any, com:any) => {
-  com.post_id=doc._id
-  storage.value
+const addCom = (post_id: any, com:any) => {
+   if (!storageComments.value) {
+    console.warn("La collection comments n'existe pas");
+    return;
+  }
+  com.post_id=post_id
+  storageComments.value
     .post(com)
     .then(() => fetchData())
     .catch(function (err: any) {
@@ -169,7 +224,8 @@ const addCom = (doc: any, com:any) => {
     })
 }
 const updateDoc = (doc: any) => {
-  doc.post_name= "Super Document Modifié";
+  doc.post_name= needle.value;
+  needle.value = '';
   storage.value
     .put(doc)
     .then(() => fetchData())
@@ -177,10 +233,10 @@ const updateDoc = (doc: any) => {
       console.log(err)
     })
 }
-const updateCom = (doc: any, com:any) => {
-  com.post_id=doc._id;
-  com.comment_content='Commentaire modifié';
-  storage.value
+const updateCom = (com:any) => {
+  com.comment_content= needleComment.value;
+  needleComment.value = '';
+  storageComments.value
     .post(com)
     .then(() => fetchData())
     .catch(function (err: any) {
@@ -197,15 +253,7 @@ const likePost = (doc:any) => {
       console.log(err)
     })
 }
-const likeCom = (com:any) => {
-  com.comment_likes++;
-  storage.value
-    .put(com)
-    .then(() => fetchData())
-    .catch(function (err: any) {
-      console.log(err)
-    })
-}
+
 const deleteDoc = (docId: any, docRev: any) => {
 
   storage.value
@@ -217,7 +265,7 @@ const deleteDoc = (docId: any, docRev: any) => {
 }
 const deleteCom = (comId: any, comRev: any) => {
 
-  storage.value
+  storageComments.value
     .remove(comId, comRev)
     .then(() => fetchData())
     .catch(function (err: any) {
@@ -238,11 +286,12 @@ const creat100Docs = (count = 100) => {
   fetchData();
 };
 
-const getComment = (postID: any)=>{
-
+const getComments = (postId: any)=>{
+const commentsFiltered = commentsData.value.filter(a => a.post_id === postId)
+  return commentsFiltered;
 }
 
-const search = (event: Event) => {
+const search = (event: any) => {
   const value = event.target.value.trim();
 
   if (!value) {
@@ -250,7 +299,7 @@ const search = (event: Event) => {
   }
 
   storage.value.find({
-    selector: { post_name: event.target.value }
+    selector: { post_content: event.target.value }
   })
 
     .then((result: any) => {
@@ -281,15 +330,29 @@ const search = (event: Event) => {
     <h2>{{ post.post_name }}</h2>
     <p>{{ post.post_content }}</p>
     <p>{{ post.post_likes }}</p>
-    <div v-for="comment in getComment(post._id)" v-bind:key="(comment as any).id">
-      <h2>{{ post.post_name }}</h2>
-      <p>{{ post.post_content }}</p>
-      <p>{{ post.post_likes }}</p>
-    </div>
+
+    <label for="needle">Editer le post</label>
+    <input type="text" name="needle" v-model="needle" @click="updateDoc(post)">
+
 
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
-    <button @click="updateDoc(post)">Editer Super Document</button>
     <button @click="likePost(post)">J'aime!</button>
+    <button @click="addCom(post._id, com)">Commenter</button>
+
+    <article v-for="comment in getComments(post._id)" v-bind:key="(comment as any).id">
+
+          <ul>
+            <li>
+              <h2>{{ comment.comment_content }}</h2>
+
+              <label for="needleComments">Editer le commentaire</label>
+              <input type="text" name="needleComments" v-model="needleComment" @click="updateCom(comment)">
+              <button @click="deleteCom(comment._id, comment._rev)">Supprimer le commentaire</button>
+            </li>
+          </ul>
+
+        </article>
+
   </article>
   <button @click="replicateDB()">Valider les changements</button>
 
