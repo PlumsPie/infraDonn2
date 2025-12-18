@@ -79,7 +79,7 @@ const initDatabase = () => {
       startSync();
     }
 
-    storage.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments")
+    storageComments.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments")
     fetchData()
     if (!offline.value) {
       startSync();
@@ -112,7 +112,7 @@ const startSync = () => {
       retry: true
     })
     .on('change', (info: any) => {
-      console.log("sync change", info);
+      console.log("Sync change", info);
       fetchData();
     })
 
@@ -123,7 +123,7 @@ const startSync = () => {
       retry: true
     })
     .on('change', (info: any) => {
-      console.log("sync change", info);
+      console.log("Sync change", info);
       fetchData();
     })
   console.log('Sync started');
@@ -332,7 +332,7 @@ const search = (event: any) => {
     <p>{{ post.post_likes }}</p>
 
     <label for="needle">Editer le post</label>
-    <input type="text" name="needle" v-model="needle" @click="updateDoc(post)">
+    <input type="text" name="needle" v-model="needle" @blur="updateDoc(post)">
 
 
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
@@ -346,7 +346,7 @@ const search = (event: any) => {
               <h2>{{ comment.comment_content }}</h2>
 
               <label for="needleComments">Editer le commentaire</label>
-              <input type="text" name="needleComments" v-model="needleComment" @click="updateCom(comment)">
+              <input type="text" name="needleComments" v-model="needleComment" @blur="updateCom(comment)">
               <button @click="deleteCom(comment._id, comment._rev)">Supprimer le commentaire</button>
             </li>
           </ul>
