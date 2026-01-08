@@ -11,10 +11,14 @@ declare interface Post {
   _rev: string;
   post_name: string
   post_content: string
-  post_likes:BigInteger
+  post_likes:number
   attributes: {
     creation_date: any
   }
+   _attachments?: Record<
+  string,
+  {content_type:string; length?: number; digest?: string; stub?: boolean}
+  >
 }
 declare interface Comment {
    _id: string;
@@ -30,7 +34,7 @@ declare interface Comment {
 // Référence à la base de données
 const storage = ref();
 const storageComments = ref();
-let offline = ref(false);
+const offline = ref(false);
 const sync = ref();
 const syncComments = ref();
 const needle = ref();
@@ -43,10 +47,9 @@ const commentsData = ref<Comment[]>([])
 onMounted(() => {
   console.log('=> Composant initialisé')
   initDatabase()
-  //fetchData()
 
 })
-
+const page = ref(0);
 
 // Initialisation de la base de données
   //  const db = new PouchDB('http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db')
@@ -68,18 +71,14 @@ const initDatabase = () => {
 
     storage.value.createIndex({
       index: {
-        fields: ['post_content']
+        fields: ['post_likes']
       }
     }).then(console.log("the index has been created!"));
 
 
-    storage.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db")
-    fetchData()
-    if (!offline.value) {
-      startSync();
-    }
+    storage.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/sarah_furrer_infradonn_db")
+    storageComments.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/sarah_furrer_infradonn_db_comments")
 
-    storageComments.value.replicate.from("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments")
     fetchData()
     if (!offline.value) {
       startSync();
@@ -106,7 +105,7 @@ const startSync = () => {
     return;
   }
 
-  sync.value = storage.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db",
+  sync.value = storage.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/sarah_furrer_infradonn_db",
     {
       live: true,
       retry: true
@@ -117,7 +116,7 @@ const startSync = () => {
     })
 
 
-    syncComments.value = storageComments.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db_comments",
+    syncComments.value = storageComments.value.sync("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/sarah_furrer_infradonn_db_comments",
     {
       live: true,
       retry: true
@@ -156,51 +155,57 @@ const handleChange = () => {
 }
 
 const replicateDB = ()=>{
-  storage.value.replicate.to("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/infradonn_db")
+  storage.value.replicate.to("http://admin:ThDR.Tk9P_q2gKkdABhB@localhost:5984/sarah_furrer_infradonn_db")
 }
 
-// Récupération des données
-const fetchData = (): any => {
-  storage.value
-    .allDocs({ include_docs: true })
+
+// Fetch data san alldocs, avec index sur likes:
+       const fetchData = () => {
+  if (!storage.value) return;
+  storage.value.find({
+    selector: {
+      post_likes: { $gte: 0 }
+    },
+    sort: [{ post_likes: "desc" }],
+    limit: 10,
+    skip: page.value * 10
+  })
     .then((result: any) => {
-      postsData.value = result.rows.map((row: any) => row.doc).filter(p => !(p._id.startsWith("_design")));
+      console.log('=> Posts récupérés triés par likes :', result.docs);
+      postsData.value = result.docs.filter(d => !(d._id.startsWith("_design")));
     })
-    .catch((error: any) => {
-      console.error('=> Erreur lors de la récupération des posts :', error)
+    .catch((err: any) => {
+      console.error('=> Erreur lors de la récupération des posts triés :', err);
     });
-    storageComments.value.allDocs({
-    include_docs: true
 
-  }).then((result: any) => {
-    console.log('=>Données récuperées', result.rows);
-    commentsData.value = result.rows.map((row: any) => row.doc);
-
-  }).catch(function (err: any) {
-    console.error('=> Erreur lors de la récupération des commentaires :', err)
-  });
-
+  // Gestion des commentaires
+  if (!storageComments.value) return;
+  storageComments.value.find({
+    selector: {
+      post_id: { $exists: true }
+    },
+  })
+    .then((result: any) => {
+      console.log('=> Commentaires récupérés :', result.docs);
+      commentsData.value = result.docs.filter(c => !(c._id.startsWith("_design")));
+    })
+    .catch((err: any) => {
+      console.error('=> Erreur lors de la récupération des commentaires :', err);
+    });
 }
+
+
+
+
 const doc = {
   post_name: 'Super Document',
   post_content: 'SuperContenu',
   post_likes:0,
-  comments: [
-    {
-      title: 'Hello',
-      author: 'Alice',
-    },
-    {
-      title: 'Hi',
-      author: 'Bob',
-    },
-  ],
+  attributes: {
+    creation_date: new Date()
+  }
 }
-const com ={
-  comment_author:`Quelqu'un de très chouette sans doute`,
-  comment_content: 'Super commentaire',
-  comment_likes:0
-}
+
 
 const addDoc = (doc: any) => {
   storage.value
@@ -210,18 +215,23 @@ const addDoc = (doc: any) => {
       console.log(err)
     })
 }
-const addCom = (post_id: any, com:any) => {
+const addCom = (post_id: any) => {
    if (!storageComments.value) {
     console.warn("La collection comments n'existe pas");
     return;
   }
-  com.post_id=post_id
-  storageComments.value
-    .post(com)
-    .then(() => fetchData())
-    .catch(function (err: any) {
-      console.log(err)
-    })
+   const newCom = {
+    post_id,
+    comment_author: "Quelqu'un de très chouette sans doute",
+    comment_content: needleComment.value || "Super commentaire",
+    attributes: {
+      creation_date: new Date()
+    }
+  };
+
+  needleComment.value = "";
+
+  storageComments.value.post(newCom).then(fetchData);
 }
 const updateDoc = (doc: any) => {
   doc.post_name= needle.value;
@@ -237,7 +247,7 @@ const updateCom = (com:any) => {
   com.comment_content= needleComment.value;
   needleComment.value = '';
   storageComments.value
-    .post(com)
+    .put(com)
     .then(() => fetchData())
     .catch(function (err: any) {
       console.log(err)
@@ -312,32 +322,96 @@ const search = (event: any) => {
     })
 }
 
+// Ajouter une image
+const selectImg = function (event: any, post: Post) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    alert('Veuillez sélectionner une image');
+    return;
+  }
+
+  storage.value.putAttachment(post._id, file.name, post._rev, file, file.type)
+    .then((result: any) => {
+      console.log('Image attachée avec succès:', result);
+      fetchData();
+    })
+    .catch((err: any) => {
+      console.error('Erreur lors de l\'attachement:', err);
+    });
+}
+
+
+// Supprimer une image
+const deleteImg = function (post: Post, attachmentName: string) {
+  storage.value.removeAttachment(post._id, attachmentName, post._rev)
+    .then((result: any) => {
+      console.log('Image supprimée avec succès:', result);
+      fetchData();
+    })
+    .catch((err: any) => {
+      console.error("Erreur suppression média :", err);
+    });
+};
+
+
+// Afficher une image
+const displayImage = (post: Post, attachName: string, imgElement: HTMLImageElement) => {
+  storage.value.getAttachment(post._id, attachName)
+    .then((blob: Blob) => {
+      const url = URL.createObjectURL(blob);
+      imgElement.src = url;
+    })
+    .catch((err: any) => {
+      console.error("Erreur chargement image:", err);
+    });
+};
+
+
+
 
 </script>
 
 <template>
-  <h1>Fetch Data</h1>
-  <p>Mode offline {{ offline }}</p>
+  <h1>Réseau social 100% legit, très fonctionnel, très élégant</h1>
+
   <label for="mode" name="mode">Mode offline</label>
   <input type="checkbox" id="mode" name="mode" v-model="offline" @change="handleChange">
 <br>
   <button @click="addDoc(doc)">Nouveau Super Document</button>
   <button @click="creat100Docs()">Générer 100 documents</button>
-  <input type="text" placeholder="Search" @keyup.enter="search" class="search">
   <br>
+  <input type="text" placeholder="Search" @keyup.enter="search">
+  <br>
+  <p>  Nombre de post : {{ postsData.length }}</p>
   <article v-for="post in postsData" v-bind:key="(post as any).id">
     <hr/>
     <h2>{{ post.post_name }}</h2>
     <p>{{ post.post_content }}</p>
     <p>{{ post.post_likes }}</p>
 
-    <label for="needle">Editer le post</label>
-    <input type="text" name="needle" v-model="needle" @blur="updateDoc(post)">
+    <input type="text" name="needle" placeholder="Éditer le post" v-model="needle" @blur="updateDoc(post)">
+    <br>
+    <label for="file">Ajouter une image</label>
+     <input type="file" name="img" accept="image/*" @change="selectImg($event, post)">
 
+        <div v-if="post._attachments && Object.keys(post._attachments).length > 0">
+          <h4>Image(s) :</h4>
+          <div v-for="(attachment, name) in post._attachments" :key="name">
+            <img :ref="(el) => el && displayImage(post, name, el)" />
+
+
+
+            <button @click="deleteImg(post, name)">Supprimer l'image</button>
+          </div>
+        </div>
+    <br>
 
     <button @click="deleteDoc(post._id,post._rev)">Supprimer Super Document</button>
+    <br>
     <button @click="likePost(post)">J'aime!</button>
-    <button @click="addCom(post._id, com)">Commenter</button>
+    <button @blur="addCom(post._id)">Commenter</button>
 
     <article v-for="comment in getComments(post._id)" v-bind:key="(comment as any).id">
 
@@ -345,8 +419,7 @@ const search = (event: any) => {
             <li>
               <h2>{{ comment.comment_content }}</h2>
 
-              <label for="needleComments">Editer le commentaire</label>
-              <input type="text" name="needleComments" v-model="needleComment" @blur="updateCom(comment)">
+              <input type="text" name="needleComments" placeholder="Éditer le commentaire" v-model="needleComment" @blur="updateCom(comment)">
               <button @click="deleteCom(comment._id, comment._rev)">Supprimer le commentaire</button>
             </li>
           </ul>
@@ -354,6 +427,8 @@ const search = (event: any) => {
         </article>
 
   </article>
+  <button @click="page++; fetchData()">Voir les 10 suivants</button>
+
   <button @click="replicateDB()">Valider les changements</button>
 
 </template>
